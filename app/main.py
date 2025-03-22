@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from sqlmodel import Field, Session, Relationship, SQLModel, create_engine, select
 from contextlib import asynccontextmanager
 from typing import List, Optional
+from fastapi.middleware.cors import CORSMiddleware
 
 class Land(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -42,6 +43,14 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allow all headers
+)
 
 @app.post("/create-land/")
 def create_land(land: Land):
