@@ -20,7 +20,7 @@ class LandPriceHistory(SQLModel, table=True):
 
     land: Land = Relationship(back_populates="prices")
 
-class Landmarks(SQLModel, table=True):
+class Landmark(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     type: str
     name: str
@@ -50,9 +50,23 @@ def create_land(land: Land):
         session.commit()
         session.refresh(land)
         return land
+    
+@app.post("/create-landmark/")
+def create_landmark(landmark: Landmark):
+    with Session(engine) as session:
+        session.add(landmark)
+        session.commit()
+        session.refresh(landmark)
+        return landmark
 
-@app.get("/list-all-land/")
+@app.get("/list-lands/")
 def read_lands():
     with Session(engine) as session:
         lands = session.exec(select(Land)).all()
         return lands
+
+@app.get("/list-landmarks/")
+def read_landmarks():
+    with Session(engine) as session:
+        landmarks = session.exec(select(Landmark)).all()
+        return landmarks
