@@ -1,8 +1,26 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File, HTTPException
+import pandas as pd
+from enum import Enum
 from sqlmodel import Field, Session, Relationship, SQLModel, create_engine, select
 from contextlib import asynccontextmanager
 from typing import List, Optional
 from fastapi.middleware.cors import CORSMiddleware
+from math import radians, cos, sin, asin, sqrt
+import io
+
+def haversine(lat1, lon1, lat2, lon2):
+    """Calculate the great-circle distance in kilometers between two points on Earth."""
+    R = 6371  # Earth radius in kilometers
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+
+    a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
+    c = 2 * asin(sqrt(a))
+    return R * c
+
+class LandmarkType(str, Enum):
+    MRT = "MRT"
+    BTS = "BTS"
 
 class Land(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -79,3 +97,61 @@ def read_landmarks():
     with Session(engine) as session:
         landmarks = session.exec(select(Landmark)).all()
         return landmarks
+
+@app.post("/bulk-create-landmarks/")
+async def bulk_create_landmarks(file: UploadFile = File(...)):
+    if file.content_type != 'text/csv':
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload a CSV.")
+
+    contents = await file.read()
+    df = pd.read_csv(io.StringIO(contents.decode("utf-8")))
+
+    required_columns = {"type", "name", "latitude", "longitude"}
+    if not required_columns.issubset(df.columns):
+        raise HTTPException(status_code=400, detail=f"CSV must contain columns: {required_columns}")
+
+    landmarks = [
+        Landmark(
+            type=row["type"],
+            name=row["name"],
+            latitude=float(row["latitude"]),
+            longitude=float(row["longitude"]),
+        )
+        for _, row in df.iterrows()
+    ]
+
+    with Session(engine) as session:
+        session.add_all(landmarks)
+        session.commit()
+
+    return {"inserted": len(landmarks)}
+
+from fastapi import HTTPException
+
+@app.get("/land/{land_id}/nearest-landmarks/")
+def get_nearest_landmarks(land_id: int):
+    with Session(engine) as session:
+        land = session.get(Land, land_id)
+        if not land:
+            raise HTTPException(status_code=404, detail="Land not found")
+
+        result = {}
+
+        for landmark_type in LandmarkType:
+            landmarks = session.exec(
+                select(Landmark).where(Landmark.type == landmark_type.value)
+            ).all()
+
+            if not landmarks:
+                result[landmark_type.value] = None  # or "Not found"
+                continue
+
+            # Find nearest
+            nearest = min(
+                landmarks,
+                key=lambda lm: haversine(land.latitude, land.longitude, lm.latitude, lm.longitude)
+            )
+            distance = haversine(land.latitude, land.longitude, nearest.latitude, nearest.longitude)
+            result[landmark_type.value] = round(distance, 3)  # Rounded for readability
+
+        return result
