@@ -2,7 +2,7 @@ import pickle
 import pandas as pd
 
 # Step 1: Load the saved model
-with open("land_price_model.pkl", "rb") as f:
+with open("model.pkl", "rb") as f:
     model = pickle.load(f)
 
 # Step 2: Prepare sample input data (must match the training features!)

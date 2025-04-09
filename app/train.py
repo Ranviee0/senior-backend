@@ -19,7 +19,7 @@ model = RandomForestRegressor(n_estimators=100, random_state=42)
 model.fit(X_train, y_train)
 
 # Step 5: Save the trained model to a pickle file
-with open("land_price_model.pkl", "wb") as f:
+with open("model.pkl", "wb") as f:
     pickle.dump(model, f)
 
 print("✅ Model trained and saved as 'land_price_model.pkl'")
