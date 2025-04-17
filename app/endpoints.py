@@ -266,7 +266,7 @@ def generate_normalized_land_csv():
 
         # Save CSV next to main.py
         current_dir = Path(__file__).resolve().parent
-        output_path = current_dir / "normalized_land_data.csv"
+        output_path = current_dir / "normalized.csv"
 
         with open(output_path, mode="w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=result_rows[0].keys())
@@ -279,7 +279,7 @@ def generate_normalized_land_csv():
 def train_land_price_model():
     try:
         # Load normalized CSV
-        df = pd.read_csv("normalized_land_data.csv")
+        df = pd.read_csv("normalized.csv")
         
         feature_cols = [
             "land_size", "dist_transit", "latitude", "longitude",
@@ -307,7 +307,7 @@ def train_land_price_model():
         return {"status": "success", "message": "Model trained and saved as model.pkl"}
     
     except FileNotFoundError:
-        return {"error": "normalized_land_data.csv not found. Please run CSV generation first."}
+        return {"error": "normalized.csv not found. Please run CSV generation first."}
     except Exception as e:
         return {"error": str(e)}
     
@@ -457,7 +457,7 @@ def predict_all_land_prices():
 
     # Save JSON to same dir as main.py
     current_dir = Path(__file__).resolve().parent
-    output_path = current_dir / "land_price_predictions.json"
+    output_path = current_dir / "predictions.json"
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(predictions, f, ensure_ascii=False, indent=2)
@@ -466,8 +466,8 @@ def predict_all_land_prices():
 
 
 @router.get("/land-price-predictions/")
-def get_land_price_predictions():
-    predictions_file = Path(__file__).resolve().parent / "land_price_predictions.json"
+def get_predictions():
+    predictions_file = Path(__file__).resolve().parent / "predictions.json"
 
     if not predictions_file.exists():
         raise HTTPException(status_code=404, detail="Prediction file not found. Please run prediction first.")
