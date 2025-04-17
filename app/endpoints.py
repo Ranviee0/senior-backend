@@ -10,6 +10,9 @@ import io
 import csv
 from pathlib import Path
 import pickle
+import json
+from fastapi.responses import JSONResponse
+
 
 router = APIRouter()
 
@@ -377,3 +380,101 @@ def predict_land_price(land_id: int):
             "normalized_input": sample,
             "predicted_land_price": round(predicted_price, 2)
         }
+
+@router.get("/predict/land-price/all")
+def predict_all_land_prices():
+    import pandas as pd
+    import pickle
+    import json
+    from pathlib import Path
+
+    try:
+        with open("model.pkl", "rb") as f:
+            model = pickle.load(f)
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="Trained model not found. Please train it first.")
+
+    predictions = []
+
+    with get_session() as session:
+        lands = session.exec(select(Land)).all()
+
+        for land in lands:
+            finance = session.exec(
+                select(LandFinance)
+                .where(LandFinance.land_id == land.id)
+                .order_by(LandFinance.year.desc())
+            ).first()
+
+            if not finance:
+                continue  # Skip if no finance data
+
+            dist_map = {}
+            for landmark_type in LandmarkType:
+                landmarks = session.exec(
+                    select(Landmark).where(Landmark.type == landmark_type.value)
+                ).all()
+                if not landmarks:
+                    dist_map[landmark_type.value] = 0.0
+                    continue
+
+                nearest = min(
+                    landmarks,
+                    key=lambda lm: haversine(
+                        land.latitude, land.longitude, lm.latitude, lm.longitude
+                    ),
+                )
+                dist = haversine(
+                    land.latitude, land.longitude, nearest.latitude, nearest.longitude
+                )
+                dist_map[landmark_type.value] = round(dist, 4)
+
+            sample = {
+                "land_size": land.land_size,
+                "dist_transit": land.dist_transit,
+                "latitude": land.latitude,
+                "longitude": land.longitude,
+                "dist_cbd": dist_map.get("CBD", 0),
+                "dist_bts": dist_map.get("BTS", 0),
+                "dis_mrt": dist_map.get("MRT", 0),
+                "dist_office": dist_map.get("Office", 0),
+                "dist_condo": dist_map.get("Condo", 0),
+                "dist_tourist": dist_map.get("Tourist", 0),
+                "year": finance.year,
+                "land_price": finance.land_price,
+                "inflation": finance.inflation,
+                "interest_rate": finance.interest_rate,
+            }
+
+            df_sample = pd.DataFrame([sample])
+            predicted_price = model.predict(df_sample)[0]
+
+            predictions.append({
+                "land_id": land.id,
+                "normalized_input": sample,
+                "predicted_land_price": round(predicted_price, 2)
+            })
+
+    # Save JSON to same dir as main.py
+    current_dir = Path(__file__).resolve().parent
+    output_path = current_dir / "land_price_predictions.json"
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(predictions, f, ensure_ascii=False, indent=2)
+
+    return {"status": "success", "file_path": str(output_path.name), "count": len(predictions)}
+
+
+@router.get("/land-price-predictions/")
+def get_land_price_predictions():
+    predictions_file = Path(__file__).resolve().parent / "land_price_predictions.json"
+
+    if not predictions_file.exists():
+        raise HTTPException(status_code=404, detail="Prediction file not found. Please run prediction first.")
+    
+    try:
+        with open(predictions_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return JSONResponse(content=data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading JSON: {str(e)}")
