@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException,File, Form, UploadFile
 from sqlmodel import select
 from app.db import get_session
-from app.models import Land, Landmark, LandmarkType, LandFinance
+from app.models import Land, Landmark, LandmarkType, LandFinance, LandFinanceTrain, LandTrain
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
@@ -69,14 +69,14 @@ def build_finance_rows(land, finance_records, dist_map):
 @router.post("/generate-normalized/")
 def generate_normalized_land_csv():
     with get_session() as session:
-        lands = session.exec(select(Land)).all()
+        lands = session.exec(select(LandTrain)).all()
         result_rows = []
 
         for land in lands:
             finance_records = session.exec(
-                select(LandFinance)
-                .where(LandFinance.land_id == land.id)
-                .order_by(LandFinance.year)
+                select(LandFinanceTrain)
+                .where(LandFinanceTrain.land_id == land.id)
+                .order_by(LandFinanceTrain.year)
             ).all()
 
             if not finance_records:
@@ -102,7 +102,7 @@ def train_land_price_model():
     try:
         root_dir = Path(__file__).resolve().parents[1]
         normalized_path = root_dir / "normalized.csv"
-        prediction_output_path = root_dir / "predicted_next_year.csv"
+        model_path = root_dir / "model.pkl"
 
         # Load normalized CSV
         df = pd.read_csv(normalized_path)
@@ -128,77 +128,17 @@ def train_land_price_model():
         model.fit(X_train, y_train)
 
         # Save model
-        with open(root_dir / "model.pkl", "wb") as f:
+        with open(model_path, "wb") as f:
             pickle.dump(model, f)
-
-        # Predict next year for each land
-        latest_years_df = df.sort_values("year").groupby(
-            ["latitude", "longitude"], as_index=False
-        ).last()
-
-        predict_next = latest_years_df.copy()
-        predict_next["year"] = predict_next["year"] + 1
-
-        X_next = predict_next[feature_cols]
-        predict_next["predicted_land_price_next_year"] = model.predict(X_next)
-
-        # Save predictions
-        predict_next.to_csv(prediction_output_path, index=False)
 
         return {
             "status": "success",
-            "message": "Model trained and next year predictions saved.",
-            "prediction_file": str(prediction_output_path.name)
+            "message": "Model trained and saved successfully.",
+            "model_file": str(model_path.name)
         }
 
     except FileNotFoundError:
         return {"error": "normalized.csv not found. Please run CSV generation first."}
-    except Exception as e:
-        return {"error": str(e)}
-
-@router.post("/test-model/")
-def test_land_price_model():
-    try:
-        root_dir = Path(__file__).resolve().parents[1]
-        model_path = root_dir / "model.pkl"
-        csv_path = root_dir / "normalized.csv"
-
-        if not model_path.exists():
-            return {"error": "Trained model file not found. Please run /train-model/ first."}
-        if not csv_path.exists():
-            return {"error": "normalized.csv not found. Please run /generate-normalized/ first."}
-
-        # Load model
-        with open(model_path, "rb") as f:
-            model = pickle.load(f)
-
-        # Load data
-        df = pd.read_csv(csv_path)
-        feature_cols = [
-            "land_size", "dist_transit", "latitude", "longitude",
-            "dist_cbd", "dist_bts", "dis_mrt", "dist_office",
-            "dist_condo", "dist_tourist", "year", "inflation", "interest_rate"
-        ]
-
-        if not all(col in df.columns for col in feature_cols + ["land_price"]):
-            return {"error": "Missing one or more required columns in CSV."}
-
-        X_test = df[feature_cols]
-        y_true = df["land_price"]
-        y_pred = model.predict(X_test)
-
-        # Metrics
-        r2 = r2_score(y_true, y_pred)
-        mae = mean_absolute_error(y_true, y_pred)
-        mse = mean_squared_error(y_true, y_pred)
-
-        return {
-            "status": "success",
-            "r2_score": round(r2, 4),
-            "mean_absolute_error": round(mae, 2),
-            "mean_squared_error": round(mse, 2),
-        }
-
     except Exception as e:
         return {"error": str(e)}
 
