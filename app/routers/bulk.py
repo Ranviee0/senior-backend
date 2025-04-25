@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from app.db import get_session
-from app.models import Land, Landmark, LandFinance
+from app.models import LandTrain, Landmark, LandFinanceTrain
 import pandas as pd
 import io
 
@@ -19,7 +19,7 @@ async def bulk_create_lands(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"CSV must contain columns: {required_columns}")
 
     lands = [
-        Land(
+        LandTrain(
             name=row["name"],
             latitude=float(row["latitude"]),
             longitude=float(row["longitude"]),
@@ -78,7 +78,7 @@ async def bulk_create_land_finance(file: UploadFile = File(...)):
     finance_records = []
     for _, row in df.iterrows():
         finance_records.append(
-            LandFinance(
+            LandFinanceTrain(
                 land_id=int(row["land_id"]),
                 year=int(row["year"]),
                 land_price=float(row["land_price"]),

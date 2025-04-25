@@ -1,6 +1,7 @@
 from typing import List, Optional
 from enum import Enum
 from sqlmodel import SQLModel, Field, Relationship
+from datetime import datetime
 
 
 class LandmarkType(str, Enum):
@@ -12,6 +13,14 @@ class LandmarkType(str, Enum):
     Tourist = "Tourist"
 
 
+class LandImage(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    land_id: int = Field(foreign_key="land.id")
+    filename: str
+    filepath: str
+    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
+
+    
 class Land(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
@@ -21,6 +30,18 @@ class Land(SQLModel, table=True):
     dist_transit: float  # distance to nearest transit in km
 
     finance_history: List["LandFinance"] = Relationship(back_populates="land")
+
+
+class LandTrain(SQLModel, table=True):
+    __tablename__ = "land_train"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    latitude: float
+    longitude: float
+    land_size: float  # in square wah or sqm
+    dist_transit: float  # distance to nearest transit in km
+
+    finance_history_train: List["LandFinanceTrain"] = Relationship(back_populates="land_train")
 
 
 class LandFinance(SQLModel, table=True):
@@ -34,12 +55,25 @@ class LandFinance(SQLModel, table=True):
     land: Land = Relationship(back_populates="finance_history")
 
 
+class LandFinanceTrain(SQLModel, table=True):
+    __tablename__ = "land_finance_train"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    land_id: int = Field(foreign_key="land_train.id")
+    year: int
+    land_price: float
+    inflation: float
+    interest_rate: float
+
+    land_train: LandTrain = Relationship(back_populates="finance_history_train")
+
+
 class Landmark(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     type: str  # could also use LandmarkType enum
     name: str
     latitude: float
     longitude: float
+
 
 class Normalized(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
