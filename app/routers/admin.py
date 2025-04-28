@@ -54,7 +54,7 @@ def build_finance_rows(land, finance_records, dist_map):
             "longitude": land.longitude,
             "dist_cbd": dist_map.get("CBD", 0),
             "dist_bts": dist_map.get("BTS", 0),
-            "dis_mrt": dist_map.get("MRT", 0),
+            "dist_mrt": dist_map.get("MRT", 0),
             "dist_office": dist_map.get("Office", 0),
             "dist_condo": dist_map.get("Condo", 0),
             "dist_tourist": dist_map.get("Tourist", 0),
@@ -109,7 +109,7 @@ def train_land_price_model():
 
         feature_cols = [
             "land_size", "dist_transit", "latitude", "longitude",
-            "dist_cbd", "dist_bts", "dis_mrt", "dist_office",
+            "dist_cbd", "dist_bts", "dist_mrt", "dist_office",
             "dist_condo", "dist_tourist", "year", "inflation", "interest_rate"
         ]
 
@@ -150,7 +150,7 @@ async def upload(
     area: float = Form(...),
     price: float = Form(...),
     address: str = Form(...),
-    lattitude: float = Form(...),
+    latitude: float = Form(...),
     longitude: float = Form(...),
     zoning: Optional[str] = Form(None),
     pop_density: float = Form(...),
@@ -166,7 +166,7 @@ async def upload(
         "area": area,
         "price": price,
         "address": address,
-        "lattitude": lattitude,
+        "latitude": latitude,
         "longitude": longitude,
         "zoning": zoning,
         "pop_density": pop_density,
