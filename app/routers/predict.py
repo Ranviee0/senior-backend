@@ -54,13 +54,6 @@ def predict_land_price(features: LandFeatures):
     except Exception as e:
         return {"error": str(e)}
 
-
-@router.get("/create-predict-body/")
-def read_land_trains():
-    with get_session() as session:
-        land = SimpleNamespace(latitude=13.8, longitude=100.5, land_size=100)
-        return create_prediction_object(session, land)
-
 @router.get("/predict-multi/", response_model=List[int])
 def predict_land_prices_multi(
     latitude: float = Query(...),
