@@ -1,6 +1,8 @@
 # utils.py
 
 from math import radians, cos, sin, asin, sqrt
+from app.models import Landmark, LandmarkType
+from sqlmodel import select
 
 def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
@@ -14,3 +16,26 @@ def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     c = 2 * asin(sqrt(a))
 
     return R * c
+
+def compute_distance_map(session, land):
+    dist_map = {}
+    for landmark_type in LandmarkType:
+        landmarks = session.exec(
+            select(Landmark).where(Landmark.type == landmark_type.value)
+        ).all()
+        if not landmarks:
+            dist_map[landmark_type.value] = 0.0
+            continue
+
+        nearest = min(
+            landmarks,
+            key=lambda lm: haversine(
+                land.latitude, land.longitude, lm.latitude, lm.longitude
+            ),
+        )
+        dist = haversine(
+            land.latitude, land.longitude, nearest.latitude, nearest.longitude
+        )
+        dist_map[landmark_type.value] = round(dist, 4)
+
+    return dist_map

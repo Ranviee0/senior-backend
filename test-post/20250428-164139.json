@@ -1,0 +1,17 @@
+{
+  "land_name": "AAA",
+  "description": "asdasdasdasdasd",
+  "area": 1000.0,
+  "price": 10.0,
+  "address": "AAAA, Phra Borom Maha Ratchawang, Khet Phra Nakhon, Bangkok, 11111",
+  "lattitude": 13.7563,
+  "longitude": 100.5018,
+  "zoning": "A",
+  "pop_density": 2863.655700557218,
+  "flood_risk": "low",
+  "nearby_dev_plan": [
+    "A",
+    "A"
+  ],
+  "uploaded_at": "20250428-164139"
+}
