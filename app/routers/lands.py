@@ -26,6 +26,7 @@ class LandReadWithImages(BaseModel):
     class Config:
         orm_mode = True
 
+
 @router.get("/", response_model=List[LandReadWithImages])
 def get_lands(request: Request):
     with get_session() as session:
@@ -64,3 +65,42 @@ def get_lands(request: Request):
             ))
 
         return result
+    
+from fastapi import HTTPException
+
+
+@router.get("/{land_id}", response_model=LandReadWithImages)
+def get_land_by_id(land_id: int, request: Request):
+    with get_session() as session:
+        land = session.get(Land, land_id)
+
+        if not land:
+            raise HTTPException(status_code=404, detail="Land not found")
+
+        images = session.exec(
+            select(LandImage).where(LandImage.landId == land.id)
+        ).all()
+
+        base_url = str(request.base_url).rstrip("/")
+
+        image_paths = [
+            f"{base_url}{image.imagePath}" if image.imagePath.startswith("/") else f"{base_url}/{image.imagePath}"
+            for image in images
+        ]
+
+        return LandReadWithImages(
+            id=land.id,
+            landName=land.landName,
+            description=land.description,
+            area=land.area,
+            price=land.price,
+            address=land.address,
+            latitude=land.latitude,
+            longitude=land.longitude,
+            zoning=land.zoning,
+            popDensity=land.popDensity,
+            floodRisk=land.floodRisk,
+            nearbyDevPlan=land.nearbyDevPlan,
+            uploadedAt=land.uploadedAt,
+            images=image_paths
+        )
