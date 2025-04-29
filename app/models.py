@@ -1,7 +1,6 @@
 from typing import List, Optional
 from enum import Enum
 from sqlmodel import SQLModel, Field, Relationship
-from datetime import datetime
 
 
 class LandmarkType(str, Enum):
@@ -12,24 +11,29 @@ class LandmarkType(str, Enum):
     Condo = "Condo"
     Tourist = "Tourist"
 
+class Land(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    landName: str
+    description: str
+    area: float
+    price: float
+    address: str
+    latitude: float
+    longitude: float
+    zoning: Optional[str]
+    popDensity: float
+    floodRisk: str
+    nearbyDevPlan: str  # store as JSON string
+    uploadedAt: str
+
+    images: List["LandImage"] = Relationship(back_populates="land")
 
 class LandImage(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    land_id: int = Field(foreign_key="land.id")
-    filename: str
-    filepath: str
-    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
+    landId: int = Field(foreign_key="land.id")
+    imagePath: str  # relative path to file (can use as URL)
 
-    
-class Land(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    name: str
-    latitude: float
-    longitude: float
-    land_size: float  # in square wah or sqm
-    dist_transit: float  # distance to nearest transit in km
-
-    finance_history: List["LandFinance"] = Relationship(back_populates="land")
+    land: Optional[Land] = Relationship(back_populates="images")
 
 
 class LandTrain(SQLModel, table=True):
@@ -42,17 +46,6 @@ class LandTrain(SQLModel, table=True):
     dist_transit: float  # distance to nearest transit in km
 
     finance_history_train: List["LandFinanceTrain"] = Relationship(back_populates="land_train")
-
-
-class LandFinance(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    land_id: int = Field(foreign_key="land.id")
-    year: int
-    land_price: float  # price per unit (e.g. million THB per rai)
-    inflation: float
-    interest_rate: float
-
-    land: Land = Relationship(back_populates="finance_history")
 
 
 class LandFinanceTrain(SQLModel, table=True):

@@ -4,8 +4,6 @@ import pandas as pd
 import pickle
 from pathlib import Path
 from app.db import get_session
-from app.models import LandTrain, LandmarkType, Landmark
-from sqlmodel import select
 from app.utils import create_prediction_object
 from types import SimpleNamespace
 from fastapi import Query
@@ -33,7 +31,7 @@ class LandFeatures(BaseModel):
     inflation: float
     interest_rate: float
 
-@router.post("/")
+@router.get("/")
 def predict_land_price(features: LandFeatures):
     try:
         # Load model

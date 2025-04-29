@@ -1,8 +1,7 @@
-from fastapi import APIRouter, HTTPException,File, Form, UploadFile
+from fastapi import APIRouter, HTTPException
 from sqlmodel import select
 from app.db import get_session
-from app.models import Land, Landmark, LandmarkType, LandFinance, LandFinanceTrain, LandTrain
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from app.models import Landmark, LandmarkType, LandFinanceTrain, LandTrain
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from app.utils import haversine
@@ -11,9 +10,7 @@ import csv
 import os
 from pathlib import Path
 import pickle
-from typing import List, Optional
-from datetime import datetime
-import json
+
 
 UPLOAD_DIR = "test-post"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -141,49 +138,3 @@ def train_land_price_model():
         return {"error": "normalized.csv not found. Please run CSV generation first."}
     except Exception as e:
         return {"error": str(e)}
-
-
-@router.post("/upload")
-async def upload(
-    land_name: str = Form(...),
-    description: str = Form(...),
-    area: float = Form(...),
-    price: float = Form(...),
-    address: str = Form(...),
-    latitude: float = Form(...),
-    longitude: float = Form(...),
-    zoning: Optional[str] = Form(None),
-    pop_density: float = Form(...),
-    flood_risk: str = Form(...),
-    nearby_dev_plan: List[str] = Form(...),
-    images: Optional[List[UploadFile]] = File(None)
-):
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-
-    json_data = {
-        "land_name": land_name,
-        "description": description,
-        "area": area,
-        "price": price,
-        "address": address,
-        "latitude": latitude,
-        "longitude": longitude,
-        "zoning": zoning,
-        "pop_density": pop_density,
-        "flood_risk": flood_risk,
-        "nearby_dev_plan": nearby_dev_plan,
-        "uploaded_at": timestamp
-    }
-
-    json_path = os.path.join(UPLOAD_DIR, f"{timestamp}.json")
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(json_data, f, indent=2, ensure_ascii=False)
-
-    if images:
-        for i, image in enumerate(images):
-            ext = os.path.splitext(image.filename)[-1]
-            file_path = os.path.join(UPLOAD_DIR, f"{timestamp}_{i+1}{ext}")
-            with open(file_path, "wb") as f:
-                f.write(await image.read())
-
-    return {"message": "Upload successful", "timestamp": timestamp}

@@ -5,9 +5,11 @@ from contextlib import asynccontextmanager
 from app.db import create_db_and_tables
 from fastapi.staticfiles import StaticFiles
 import app.routers.bulk as bulk
-import app.routers.admin as admin
+import app.routers.setup as setup
 import app.routers.predict as predict
- 
+import app.routers.upload as upload
+import app.routers.lands as lands
+
 # FastAPI app
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -25,6 +27,8 @@ app.add_middleware(
 )
 
 app.include_router(bulk.router, prefix="/bulk")
-app.include_router(admin.router, prefix="/admin")
+app.include_router(setup.router, prefix="/setup")
 app.include_router(predict.router, prefix="/predict")
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.include_router(upload.router, prefix="/upload")
+app.include_router(lands.router, prefix="/lands")
+app.mount("/uploaded_files", StaticFiles(directory="uploaded_files"), name="uploaded_files")
