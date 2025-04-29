@@ -9,6 +9,7 @@ import app.routers.setup as setup
 import app.routers.predict as predict
 import app.routers.upload as upload
 import app.routers.lands as lands
+import app.routers.landmarks as landmarks
 
 # FastAPI app
 @asynccontextmanager
@@ -31,4 +32,5 @@ app.include_router(setup.router, prefix="/setup")
 app.include_router(predict.router, prefix="/predict")
 app.include_router(upload.router, prefix="/upload")
 app.include_router(lands.router, prefix="/lands")
+app.include_router(landmarks.router, prefix="/landmarks")
 app.mount("/uploaded_files", StaticFiles(directory="uploaded_files"), name="uploaded_files")
