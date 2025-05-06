@@ -1,140 +1,109 @@
 from fastapi import APIRouter, HTTPException
 from sqlmodel import select
 from app.db import get_session
-from app.models import Landmark, LandmarkType, LandFinanceTrain, LandTrain
+from app.models import Landmark, LandmarkType  # Assuming LandmarkType is an Enum
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from app.utils import haversine
+from pathlib import Path
 import pandas as pd
 import csv
 import os
-from pathlib import Path
 import pickle
-
-
-UPLOAD_DIR = "test-post"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+import json
 
 router = APIRouter()
 
-def compute_distance_map(session, land):
-    dist_map = {}
-    for landmark_type in LandmarkType:
-        landmarks = session.exec(
-            select(Landmark).where(Landmark.type == landmark_type.value)
-        ).all()
-        if not landmarks:
-            dist_map[landmark_type.value] = 0.0
-            continue
+@router.post("/generate-and-train/")
+def generate_and_train():
+    root_dir = Path(__file__).resolve().parents[1]
+    landmarks_path = root_dir / "data" / "landmarks.csv"
+    land_path = root_dir / "data" / "land.csv"
+    finance_path = root_dir / "data" / "land-finance.csv"
+    normalized_path = root_dir / "normalized.csv"
+    model_path = root_dir / "model.pkl"
+    feature_path = root_dir / "features.json"
 
-        nearest = min(
-            landmarks,
-            key=lambda lm: haversine(
-                land.latitude, land.longitude, lm.latitude, lm.longitude
-            ),
-        )
-        dist = haversine(
-            land.latitude, land.longitude, nearest.latitude, nearest.longitude
-        )
-        dist_map[landmark_type.value] = round(dist, 4)
+    if not (landmarks_path.exists() and land_path.exists() and finance_path.exists()):
+        raise HTTPException(status_code=400, detail="One or more input files are missing.")
 
-    return dist_map
-
-
-def build_finance_rows(land, finance_records, dist_map):
-    rows = []
-    for finance in finance_records:
-        rows.append({
-            "land_size": land.land_size,
-            "dist_transit": land.dist_transit,
-            "latitude": land.latitude,
-            "longitude": land.longitude,
-            "dist_cbd": dist_map.get("CBD", 0),
-            "dist_bts": dist_map.get("BTS", 0),
-            "dist_mrt": dist_map.get("MRT", 0),
-            "dist_office": dist_map.get("Office", 0),
-            "dist_condo": dist_map.get("Condo", 0),
-            "dist_tourist": dist_map.get("Tourist", 0),
-            "year": finance.year,
-            "land_price": finance.land_price,
-            "inflation": finance.inflation,
-            "interest_rate": finance.interest_rate,
-        })
-    return rows
-
-
-@router.post("/generate-normalized/")
-def generate_normalized_land_csv():
     with get_session() as session:
-        lands = session.exec(select(LandTrain)).all()
-        result_rows = []
+        # ✅ Load and insert landmarks
+        df_landmarks = pd.read_csv(landmarks_path)
+        for _, row in df_landmarks.iterrows():
+            landmark = Landmark(
+                type=row["type"],
+                name=row["name"],
+                latitude=row["latitude"],
+                longitude=row["longitude"]
+            )
+            session.add(landmark)
+        session.commit()
 
-        for land in lands:
-            finance_records = session.exec(
-                select(LandFinanceTrain)
-                .where(LandFinanceTrain.land_id == land.id)
-                .order_by(LandFinanceTrain.year)
-            ).all()
+        # ✅ Load land + finance data
+        df_land = pd.read_csv(land_path)
+        df_land["id"] = df_land.index + 1
+        df_finance = pd.read_csv(finance_path)
+        df_merged = df_finance.merge(df_land, left_on="land_id", right_on="id")
 
-            if not finance_records:
-                continue
+        # ✅ Compute distances
+        dist_maps = []
+        landmarks = session.exec(select(Landmark)).all()
 
-            dist_map = compute_distance_map(session, land)
-            result_rows.extend(build_finance_rows(land, finance_records, dist_map))
+        for _, land_row in df_land.iterrows():
+            lat, lon = land_row["latitude"], land_row["longitude"]
+            dist_map = {}
+            for ltype in df_landmarks["type"].unique():
+                same_type = [lm for lm in landmarks if lm.type == ltype]
+                if not same_type:
+                    dist_map[f"dist_{ltype.lower()}"] = 0
+                    continue
+                nearest = min(same_type, key=lambda lm: haversine(lat, lon, lm.latitude, lm.longitude))
+                dist = haversine(lat, lon, nearest.latitude, nearest.longitude)
+                dist_map[f"dist_{ltype.lower()}"] = round(dist, 4)
+            dist_maps.append(dist_map)
 
-        if not result_rows:
-            raise HTTPException(status_code=404, detail="No data found to normalize.")
+        df_dist = pd.DataFrame(dist_maps)
+        df_final = pd.concat([df_merged, df_dist], axis=1)
 
-        output_path = Path(__file__).resolve().parents[1] / "normalized.csv"
-        with open(output_path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=result_rows[0].keys())
-            writer.writeheader()
-            writer.writerows(result_rows)
+        # ✅ Save normalized CSV
+        df_final.to_csv(normalized_path, index=False)
 
-        return {"status": "success", "file_path": str(output_path.name)}
+    # ✅ Train model
+    df = pd.read_csv(normalized_path)
 
+    if "land_price" not in df.columns:
+        raise HTTPException(status_code=400, detail="Missing 'land_price' column in normalized data.")
 
-@router.post("/train-model/")
-def train_land_price_model():
-    try:
-        root_dir = Path(__file__).resolve().parents[1]
-        normalized_path = root_dir / "normalized.csv"
-        model_path = root_dir / "model.pkl"
+    # Infer feature columns dynamically
+    distance_cols = [col for col in df.columns if col.startswith("dist_")]
+    macro_cols = ["year", "inflation", "interest_rate"]
+    basic_cols = ["land_size", "latitude", "longitude"]
+    features = basic_cols + distance_cols + macro_cols
 
-        # Load normalized CSV
-        df = pd.read_csv(normalized_path)
+    # Validate presence
+    if not all(col in df.columns for col in features + ["land_price"]):
+        raise HTTPException(status_code=400, detail="Missing one or more required columns.")
 
-        feature_cols = [
-            "land_size", "dist_transit", "latitude", "longitude",
-            "dist_cbd", "dist_bts", "dist_mrt", "dist_office",
-            "dist_condo", "dist_tourist", "year", "inflation", "interest_rate"
-        ]
+    # ✅ Train
+    X = df[features]
+    y = df["land_price"]
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-        if not all(col in df.columns for col in feature_cols + ["land_price"]):
-            return {"error": "Missing one or more required columns in CSV."}
+    model = RandomForestRegressor(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
 
-        # Train model
-        X = df[feature_cols]
-        y = df["land_price"]
+    # ✅ Save model
+    with open(model_path, "wb") as f:
+        pickle.dump(model, f)
 
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42
-        )
+    # ✅ Save feature names
+    with open(feature_path, "w") as f:
+        json.dump(features, f)
 
-        model = RandomForestRegressor(n_estimators=100, random_state=42)
-        model.fit(X_train, y_train)
-
-        # Save model
-        with open(model_path, "wb") as f:
-            pickle.dump(model, f)
-
-        return {
-            "status": "success",
-            "message": "Model trained and saved successfully.",
-            "model_file": str(model_path.name)
-        }
-
-    except FileNotFoundError:
-        return {"error": "normalized.csv not found. Please run CSV generation first."}
-    except Exception as e:
-        return {"error": str(e)}
+    return {
+        "status": "success",
+        "message": "Landmarks inserted, data normalized, and model trained.",
+        "model_file": model_path.name,
+        "features_file": feature_path.name,
+    }

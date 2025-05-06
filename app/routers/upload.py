@@ -9,7 +9,7 @@ import json
 
 router = APIRouter()
 
-UPLOAD_DIR = "uploaded_files"  # make sure this folder exists
+UPLOAD_DIR = "uploaded_files"  # Directory for uploaded images
 
 @router.post("/")
 async def upload(
@@ -26,11 +26,12 @@ async def upload(
     nearby_dev_plan: List[str] = Form(...),
     images: Optional[List[UploadFile]] = File(None)
 ):
+    # ✅ Ensure upload directory exists
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
     with get_session() as session:
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-
         new_land = Land(
             landName=land_name,
             description=description,
@@ -47,9 +48,9 @@ async def upload(
         )
         session.add(new_land)
         session.commit()
-        session.refresh(new_land)  # ✅ this ensures ID is populated
+        session.refresh(new_land)
 
-        land_id = new_land.id   # ✅ Save id BEFORE session closes
+        land_id = new_land.id
 
         if images:
             for i, image in enumerate(images):
@@ -60,13 +61,12 @@ async def upload(
                 with open(file_path, "wb") as f:
                     f.write(await image.read())
 
-            new_image = LandImage(
-                landId=land_id,
-                imagePath=f"/{UPLOAD_DIR}/{filename}"
-            )
-            session.add(new_image)
+                new_image = LandImage(
+                    landId=land_id,
+                    imagePath=f"/{UPLOAD_DIR}/{filename}"
+                )
+                session.add(new_image)
 
         session.commit()
 
-    # 🔥 Now session is closed, but land_id is safe
     return {"message": "Upload successful", "land_id": land_id}

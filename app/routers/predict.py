@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from fastapi import HTTPException
 from pydantic import BaseModel
 import pandas as pd
 import pickle
@@ -8,6 +9,7 @@ from app.utils import create_prediction_object
 from types import SimpleNamespace
 from fastapi import Query
 from typing import List
+import json
 
 router = APIRouter()
 
@@ -31,27 +33,6 @@ class LandFeatures(BaseModel):
     inflation: float
     interest_rate: float
 
-@router.get("/")
-def predict_land_price(features: LandFeatures):
-    try:
-        # Load model
-        model_path = Path(__file__).resolve().parents[1] / "model.pkl"
-        with open(model_path, "rb") as f:
-            model = pickle.load(f)
-
-        # Convert input to DataFrame
-        input_df = pd.DataFrame([features.model_dump()])
-
-        # Predict
-        prediction = model.predict(input_df)[0]
-
-        return {"predicted_land_price": prediction}
-
-    except FileNotFoundError:
-        return {"error": "model.pkl not found. Train the model first."}
-    except Exception as e:
-        return {"error": str(e)}
-
 @router.get("/predict-multi/", response_model=List[int])
 def predict_land_prices_multi(
     latitude: float = Query(...),
@@ -59,33 +40,32 @@ def predict_land_prices_multi(
     land_size: float = Query(...),
 ):
     try:
-        # Step 1: Load model
-        model_path = Path(__file__).resolve().parents[1] / "model.pkl"
+        root_dir = Path(__file__).resolve().parents[1]
+        model_path = root_dir / "model.pkl"
+        feature_path = root_dir / "features.json"
+
+        # ✅ Load model
         with open(model_path, "rb") as f:
             model = pickle.load(f)
+            if isinstance(model, tuple):
+                model = model[0]  # unpack if tuple
 
-        # Step 2: Fixed macro factors
-        inflation = 1.5  # <-- your fixed value
-        interest_rate = 3.0  # <-- your fixed value
+        # ✅ Load expected features
+        with open(feature_path, "r") as f:
+            expected_cols = json.load(f)
 
-        # Step 3: Create land object
-        land = SimpleNamespace(
-            latitude=latitude,
-            longitude=longitude,
-            land_size=land_size
-        )
+        # ✅ Fixed macroeconomic values
+        inflation = 1.5
+        interest_rate = 3.0
 
-        # Step 4: Build the base prediction object
+        # ✅ Land input
+        land = SimpleNamespace(latitude=latitude, longitude=longitude, land_size=land_size)
+
+        # ✅ Build features
         with get_session() as session:
             base_features = create_prediction_object(session, land)
 
-        # Step 5: Predict for years 1-5
         predictions = []
-        expected_cols = [
-        "land_size", "dist_transit", "latitude", "longitude",
-        "dist_cbd", "dist_bts", "dist_mrt", "dist_office",
-        "dist_condo", "dist_tourist", "year", "inflation", "interest_rate"
-        ]
 
         for year in range(1, 6):
             features_dict = base_features.model_dump()
@@ -93,19 +73,23 @@ def predict_land_prices_multi(
                 "year": year,
                 "inflation": inflation,
                 "interest_rate": interest_rate
-        })
+            })
 
             input_df = pd.DataFrame([features_dict])
+
+            # Ensure the feature order and presence
+            missing_cols = [col for col in expected_cols if col not in input_df.columns]
+            if missing_cols:
+                raise HTTPException(status_code=400, detail=f"Missing input features: {missing_cols}")
+
             input_df = input_df[expected_cols]
 
             predicted_price = model.predict(input_df)[0]
+            predictions.append(int(round(predicted_price)))
 
-            predictions.append(int(round(predicted_price)))  # 🔥 directly append rounded integer
-
-        # ✅ Return after loop
         return predictions
 
     except FileNotFoundError:
-        return {"error": "model.pkl not found. Train the model first."}
+        raise HTTPException(status_code=404, detail="model.pkl or features.json not found. Train the model first.")
     except Exception as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
