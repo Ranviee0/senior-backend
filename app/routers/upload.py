@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Form, File, UploadFile
 from typing import List, Optional
-from app.db import get_session
-from app.models import TempLand, TempLandImage  # 👈 Use the TEMP models
 from datetime import datetime
+from app.db import get_session
+from app.models import TempLand, TempLandImage
 import base64
 import json
+from PIL import Image
+from io import BytesIO
+
 
 router = APIRouter()
 
@@ -47,11 +50,25 @@ async def upload_temp_land(
 
         temp_land_id = new_temp_land.id
 
-        # Handle base64 image encoding
         if images:
             for image in images:
-                image_bytes = await image.read()
-                image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+                # Read image bytes
+                original_bytes = await image.read()
+
+                # Open image with PIL
+                try:
+                    img = Image.open(BytesIO(original_bytes)).convert("RGBA")
+                except Exception:
+                    continue  # skip if image is not readable
+
+                # Convert to PNG in memory
+                buffer = BytesIO()
+                img.save(buffer, format="PNG")
+                buffer.seek(0)
+                png_bytes = buffer.read()
+
+                # Encode to base64
+                image_base64 = base64.b64encode(png_bytes).decode("utf-8")
 
                 temp_image = TempLandImage(
                     tempLandId=temp_land_id,

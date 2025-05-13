@@ -2,3 +2,4 @@ sqlmodel
 fastapi[standard]
 pandas
 scikit-learn
+pillow
