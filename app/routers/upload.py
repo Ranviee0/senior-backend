@@ -1,18 +1,16 @@
 from fastapi import APIRouter, Form, File, UploadFile
 from typing import List, Optional
-from sqlmodel import select
 from app.db import get_session
-from app.models import Land, LandImage
+from app.models import TempLand, TempLandImage  # 👈 Use the TEMP models
 from datetime import datetime
-import os
+import base64
 import json
 
 router = APIRouter()
 
-UPLOAD_DIR = "uploaded_files"  # Directory for uploaded images
 
-@router.post("/")
-async def upload(
+@router.post("/temp-upload/")
+async def upload_temp_land(
     land_name: str = Form(...),
     description: str = Form(...),
     area: float = Form(...),
@@ -26,13 +24,10 @@ async def upload(
     nearby_dev_plan: List[str] = Form(...),
     images: Optional[List[UploadFile]] = File(None)
 ):
-    # ✅ Ensure upload directory exists
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
     with get_session() as session:
-        new_land = Land(
+        new_temp_land = TempLand(
             landName=land_name,
             description=description,
             area=area,
@@ -46,27 +41,24 @@ async def upload(
             nearbyDevPlan=json.dumps(nearby_dev_plan, ensure_ascii=False),
             uploadedAt=timestamp,
         )
-        session.add(new_land)
+        session.add(new_temp_land)
         session.commit()
-        session.refresh(new_land)
+        session.refresh(new_temp_land)
 
-        land_id = new_land.id
+        temp_land_id = new_temp_land.id
 
+        # Handle base64 image encoding
         if images:
-            for i, image in enumerate(images):
-                ext = os.path.splitext(image.filename)[-1]
-                filename = f"{timestamp}_{i+1}{ext}"
-                file_path = os.path.join(UPLOAD_DIR, filename)
+            for image in images:
+                image_bytes = await image.read()
+                image_base64 = base64.b64encode(image_bytes).decode("utf-8")
 
-                with open(file_path, "wb") as f:
-                    f.write(await image.read())
-
-                new_image = LandImage(
-                    landId=land_id,
-                    imagePath=f"/{UPLOAD_DIR}/{filename}"
+                temp_image = TempLandImage(
+                    tempLandId=temp_land_id,
+                    imageBase64=image_base64
                 )
-                session.add(new_image)
+                session.add(temp_image)
 
         session.commit()
 
-    return {"message": "Upload successful", "land_id": land_id}
+    return {"message": "Temporary upload successful", "temp_land_id": temp_land_id}

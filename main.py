@@ -8,6 +8,7 @@ import app.routers.predict as predict
 import app.routers.upload as upload
 import app.routers.lands as lands
 import app.routers.landmarks as landmarks
+import app.routers.check as check
 import os
 
 UPLOAD_DIR = "uploaded_files"
@@ -41,3 +42,4 @@ app.include_router(predict.router, prefix="/predict")
 app.include_router(upload.router, prefix="/upload")
 app.include_router(lands.router, prefix="/lands")
 app.include_router(landmarks.router, prefix="/landmarks")
+app.include_router(check.router, prefix="/check")
