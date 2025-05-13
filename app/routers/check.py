@@ -141,3 +141,26 @@ def publish_temp_land(temp_land_id: int):
         session.commit()
 
     return {"message": "Land published successfully", "land_id": land_id}
+
+@router.delete("/reject/{temp_land_id}")
+def reject_temp_land(temp_land_id: int):
+    with get_session() as session:
+        stmt = (
+            select(TempLand)
+            .where(TempLand.id == temp_land_id)
+            .options(selectinload(TempLand.images))
+        )
+        temp_land = session.exec(stmt).first()
+
+        if not temp_land:
+            raise HTTPException(status_code=404, detail="TempLand not found")
+
+        # Delete associated images
+        for img in temp_land.images:
+            session.delete(img)
+
+        # Delete the TempLand itself
+        session.delete(temp_land)
+        session.commit()
+
+    return {"message": f"TempLand {temp_land_id} has been rejected and deleted."}
