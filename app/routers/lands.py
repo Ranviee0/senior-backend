@@ -70,25 +70,33 @@ from fastapi import HTTPException
 
 
 @router.get("/search", response_model=List[LandReadWithImages])
-def search_lands(request: Request, search: Optional[str] = Query(None)):
+def search_lands(
+    request: Request,
+    province: Optional[str] = Query(None),
+    name: Optional[str] = Query(None),
+):
     with get_session() as session:
         query = select(Land)
+        all_lands = session.exec(query).all()
 
-        # If a search term is provided, filter by province
-        if search:
-            search_lower = search.lower()
-            all_lands = session.exec(query).all()
+        filtered_lands = []
 
-            # Filter manually based on province (last part of the address)
-            filtered_lands = []
-            for land in all_lands:
+        for land in all_lands:
+            matches_province = True
+            matches_name = True
+
+            # ✅ Province filter
+            if province:
                 address_parts = [part.strip() for part in land.address.split(",")]
-                if address_parts:
-                    province = address_parts[-2] if len(address_parts) >= 2 else address_parts[-1]
-                    if search_lower in province.lower():
-                        filtered_lands.append(land)
-        else:
-            filtered_lands = session.exec(query).all()
+                province_text = address_parts[-2] if len(address_parts) >= 2 else address_parts[-1]
+                matches_province = province.lower() in province_text.lower()
+
+            # ✅ Land name filter
+            if name:
+                matches_name = name.lower() in land.landName.lower()
+
+            if matches_province and matches_name:
+                filtered_lands.append(land)
 
         base_url = str(request.base_url).rstrip("/")
         result = []
