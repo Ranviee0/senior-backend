@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Query
 from app.db import get_session
 from typing import List, Optional
 from app.models import Land, LandImage
@@ -68,6 +68,59 @@ def get_lands(request: Request):
     
 from fastapi import HTTPException
 
+
+@router.get("/search", response_model=List[LandReadWithImages])
+def search_lands(request: Request, search: Optional[str] = Query(None)):
+    with get_session() as session:
+        query = select(Land)
+
+        # If a search term is provided, filter by province
+        if search:
+            search_lower = search.lower()
+            all_lands = session.exec(query).all()
+
+            # Filter manually based on province (last part of the address)
+            filtered_lands = []
+            for land in all_lands:
+                address_parts = [part.strip() for part in land.address.split(",")]
+                if address_parts:
+                    province = address_parts[-2] if len(address_parts) >= 2 else address_parts[-1]
+                    if search_lower in province.lower():
+                        filtered_lands.append(land)
+        else:
+            filtered_lands = session.exec(query).all()
+
+        base_url = str(request.base_url).rstrip("/")
+        result = []
+        for land in filtered_lands:
+            images = session.exec(
+                select(LandImage).where(LandImage.landId == land.id)
+            ).all()
+
+            image_paths = [
+                f"{base_url}{image.imagePath}" if image.imagePath.startswith("/") else f"{base_url}/{image.imagePath}"
+                for image in images
+            ]
+
+            result.append(LandReadWithImages(
+                id=land.id,
+                landName=land.landName,
+                description=land.description,
+                area=land.area,
+                price=land.price,
+                address=land.address,
+                latitude=land.latitude,
+                longitude=land.longitude,
+                zoning=land.zoning,
+                popDensity=land.popDensity,
+                floodRisk=land.floodRisk,
+                nearbyDevPlan=land.nearbyDevPlan,
+                uploadedAt=land.uploadedAt,
+                images=image_paths
+            ))
+
+        return result
+    
 
 @router.get("/{land_id}", response_model=LandReadWithImages)
 def get_land_by_id(land_id: int, request: Request):
