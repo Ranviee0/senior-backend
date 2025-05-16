@@ -165,3 +165,26 @@ def get_land_by_id(land_id: int, request: Request):
             uploadedAt=land.uploadedAt,
             images=image_paths
         )
+
+
+
+@router.delete("/{land_id}")
+def delete_land(land_id: int):
+    with get_session() as session:
+        land = session.get(Land, land_id)
+
+        if not land:
+            raise HTTPException(status_code=404, detail="Land not found")
+
+        # Delete related LandImage records first
+        images = session.exec(
+            select(LandImage).where(LandImage.landId == land.id)
+        ).all()
+        for image in images:
+            session.delete(image)
+
+        # Now delete the Land record
+        session.delete(land)
+        session.commit()
+
+        return {"detail": "Land and related images deleted successfully"}
