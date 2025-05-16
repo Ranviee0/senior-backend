@@ -30,7 +30,7 @@ app.mount(f"/{UPLOAD_DIR}", StaticFiles(directory=UPLOAD_DIR), name="uploaded_fi
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://senior-frontend-13sh.vercel.app/", "http://localhost:3000"],
+    allow_origins=["https://senior-frontend-13sh.vercel.app", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
